@@ -1,0 +1,15 @@
+id = "barnuri.auto-update"
+name = "Auto Update"
+version = "0.1.0"
+min_herdr_version = "0.7.0"
+description = "Keep herdr always up to date — auto-applies patch/minor/major updates (each toggleable) with live handoff"
+platforms = ["linux", "macos"]
+
+[[startup]]
+command = ["node", "bin/watch.js"]
+
+[[actions]]
+id = "check-now"
+title = "Check for herdr updates now"
+contexts = ["workspace", "pane"]
+command = ["node", "bin/check.js", "--notify-when-current"]
