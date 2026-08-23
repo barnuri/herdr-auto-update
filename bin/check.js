@@ -7,8 +7,10 @@ const path = require('node:path');
 
 const { loadConfig } = require('../lib/config');
 const { currentVersion, latestVersion, decideUpdate, runUpdate, notify } = require('../lib/updater');
+const { createLogger } = require('../lib/logger');
 
 const NOTIFICATION_TITLE = 'Herdr Auto Update';
+const logger = createLogger('check');
 
 function stateDir() {
   return process.env.HERDR_PLUGIN_STATE_DIR || path.join(os.homedir(), '.local', 'state', 'herdr-auto-update');
@@ -20,8 +22,11 @@ function statePath() {
 
 function readState() {
   try {
-    return JSON.parse(fs.readFileSync(statePath(), 'utf8'));
-  } catch {
+    const state = JSON.parse(fs.readFileSync(statePath(), 'utf8'));
+    logger.debug(`state read from ${statePath()}: ${JSON.stringify(state)}`);
+    return state;
+  } catch (error) {
+    logger.debug(`no usable prior state at ${statePath()}: ${error.message}`);
     return {};
   }
 }
@@ -30,16 +35,18 @@ function writeState(state) {
   try {
     fs.mkdirSync(stateDir(), { recursive: true });
     fs.writeFileSync(statePath(), `${JSON.stringify(state)}\n`, 'utf8');
+    logger.debug(`state written to ${statePath()}`);
   } catch (error) {
-    process.stderr.write(`herdr-auto-update: failed to persist state: ${error.message}\n`);
+    logger.error(`failed to persist state: ${error.message}`);
   }
 }
 
 async function checkOnce({ notifyWhenCurrent = false } = {}) {
   const config = loadConfig();
+  logger.debug('starting update check');
   const current = currentVersion();
   if (!current) {
-    process.stderr.write('herdr-auto-update: could not read the current herdr version\n');
+    logger.error('could not read the current herdr version');
     return;
   }
   const latest = await latestVersion();
