@@ -55,6 +55,7 @@ async function checkOnce({ notifyWhenCurrent = false } = {}) {
   writeState({ ...state, lastCheckAt: new Date().toISOString(), current, latest });
 
   if (decision.action === 'none') {
+    logger.info(`up to date: herdr ${current}`);
     process.stdout.write(`herdr ${current} is up to date\n`);
     if (notifyWhenCurrent) {
       notify(NOTIFICATION_TITLE, `herdr ${current} is up to date`);
@@ -63,6 +64,7 @@ async function checkOnce({ notifyWhenCurrent = false } = {}) {
   }
 
   if (decision.action === 'skip') {
+    logger.info(`skipped: ${decision.kind} update ${current} -> ${latest} (disabled in config)`);
     process.stdout.write(`skipping ${decision.kind} update ${current} -> ${latest} (disabled in config)\n`);
     // notify a skipped version once, not on every poll
     if (state.notifiedSkipVersion !== latest) {
@@ -72,12 +74,15 @@ async function checkOnce({ notifyWhenCurrent = false } = {}) {
     return;
   }
 
+  logger.info(`updating: ${decision.kind} update ${current} -> ${latest}`);
   process.stdout.write(`updating herdr ${current} -> ${latest} (${decision.kind})\n`);
   const result = runUpdate({ handoff: config.updateWithHandoff });
   if (result.ok) {
+    logger.info(`updated: herdr ${current} -> ${latest}`);
     notify(NOTIFICATION_TITLE, `herdr updated ${current} -> ${latest}`);
     return;
   }
+  logger.error(`update failed: ${current} -> ${latest}: ${result.output.slice(0, 400)}`);
   process.stderr.write(`herdr-auto-update: update failed: ${result.output.slice(0, 400)}\n`);
   notify(NOTIFICATION_TITLE, `herdr update to ${latest} failed — run 'herdr update' manually`);
 }
