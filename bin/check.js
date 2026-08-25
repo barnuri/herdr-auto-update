@@ -1,45 +1,15 @@
 #!/usr/bin/env node
 'use strict';
 
-const fs = require('node:fs');
-const os = require('node:os');
-const path = require('node:path');
-
 const { loadConfig } = require('../lib/config');
+const { readState, writeState } = require('../lib/state');
 const { currentVersion, latestVersion, decideUpdate, runUpdate, notify } = require('../lib/updater');
 const { createLogger } = require('../lib/logger');
 
 const NOTIFICATION_TITLE = 'Herdr Auto Update';
+const NOTIFY_OUTPUT_LIMIT = 400;
+const STATE_ERROR_LIMIT = 200;
 const logger = createLogger('check');
-
-function stateDir() {
-  return process.env.HERDR_PLUGIN_STATE_DIR || path.join(os.homedir(), '.local', 'state', 'herdr-auto-update');
-}
-
-function statePath() {
-  return path.join(stateDir(), 'last-check.json');
-}
-
-function readState() {
-  try {
-    const state = JSON.parse(fs.readFileSync(statePath(), 'utf8'));
-    logger.debug(`state read from ${statePath()}: ${JSON.stringify(state)}`);
-    return state;
-  } catch (error) {
-    logger.debug(`no usable prior state at ${statePath()}: ${error.message}`);
-    return {};
-  }
-}
-
-function writeState(state) {
-  try {
-    fs.mkdirSync(stateDir(), { recursive: true });
-    fs.writeFileSync(statePath(), `${JSON.stringify(state)}\n`, 'utf8');
-    logger.debug(`state written to ${statePath()}`);
-  } catch (error) {
-    logger.error(`failed to persist state: ${error.message}`);
-  }
-}
 
 async function checkOnce({ notifyWhenCurrent = false } = {}) {
   const config = loadConfig();
@@ -52,11 +22,17 @@ async function checkOnce({ notifyWhenCurrent = false } = {}) {
   const latest = await latestVersion();
   const decision = decideUpdate(config, current, latest);
   const state = readState();
-  writeState({ ...state, lastCheckAt: new Date().toISOString(), current, latest });
+  writeState({
+    lastCheckAt: new Date().toISOString(),
+    checkIntervalMinutes: config.checkIntervalMinutes,
+    current,
+    latest,
+  });
 
   if (decision.action === 'none') {
     logger.info(`up to date: herdr ${current}`);
     process.stdout.write(`herdr ${current} is up to date\n`);
+    writeState({ lastResult: 'current', lastUpdateError: null });
     if (notifyWhenCurrent) {
       notify(NOTIFICATION_TITLE, `herdr ${current} is up to date`);
     }
@@ -66,9 +42,10 @@ async function checkOnce({ notifyWhenCurrent = false } = {}) {
   if (decision.action === 'skip') {
     logger.info(`skipped: ${decision.kind} update ${current} -> ${latest} (disabled in config)`);
     process.stdout.write(`skipping ${decision.kind} update ${current} -> ${latest} (disabled in config)\n`);
+    writeState({ lastResult: 'skipped', lastUpdateError: null });
     // notify a skipped version once, not on every poll
     if (state.notifiedSkipVersion !== latest) {
-      writeState({ ...readState(), notifiedSkipVersion: latest });
+      writeState({ notifiedSkipVersion: latest });
       notify(NOTIFICATION_TITLE, `herdr ${latest} available (${decision.kind} update) — auto-${decision.kind} updates are off`);
     }
     return;
@@ -79,11 +56,13 @@ async function checkOnce({ notifyWhenCurrent = false } = {}) {
   const result = runUpdate({ handoff: config.updateWithHandoff });
   if (result.ok) {
     logger.info(`updated: herdr ${current} -> ${latest}`);
+    writeState({ lastResult: 'updated', lastUpdateError: null });
     notify(NOTIFICATION_TITLE, `herdr updated ${current} -> ${latest}`);
     return;
   }
-  logger.error(`update failed: ${current} -> ${latest}: ${result.output.slice(0, 400)}`);
-  process.stderr.write(`herdr-auto-update: update failed: ${result.output.slice(0, 400)}\n`);
+  logger.error(`update failed: ${current} -> ${latest}: ${result.output.slice(0, NOTIFY_OUTPUT_LIMIT)}`);
+  writeState({ lastResult: 'failed', lastUpdateError: result.output.slice(0, STATE_ERROR_LIMIT) || 'herdr update failed' });
+  process.stderr.write(`herdr-auto-update: update failed: ${result.output.slice(0, NOTIFY_OUTPUT_LIMIT)}\n`);
   notify(NOTIFICATION_TITLE, `herdr update to ${latest} failed — run 'herdr update' manually`);
 }
 

@@ -13,3 +13,38 @@ id = "check-now"
 title = "Check for herdr updates now"
 contexts = ["workspace", "pane"]
 command = ["node", "bin/check.js", "--notify-when-current"]
+
+# herdr spawns [[startup]] processes only when its server boots and never
+# restarts one that dies. These hooks re-run an idempotent liveness check so a
+# dead watcher heals on the next UI interaction.
+[[events]]
+on = "pane.focused"
+command = ["bash", "scripts/ensure-watch.sh"]
+
+[[events]]
+on = "tab.created"
+command = ["bash", "scripts/ensure-watch.sh"]
+
+[[events]]
+on = "workspace.created"
+command = ["bash", "scripts/ensure-watch.sh"]
+
+[[panes]]
+id = "logs"
+title = "Auto Update Logs"
+placement = "split"
+command = ["bash", "scripts/show-logs.sh"]
+
+[[actions]]
+id = "show-logs"
+title = "Show auto-update logs"
+description = "Open a pane tailing this plugin's log."
+contexts = ["workspace", "pane"]
+command = ["herdr", "plugin", "pane", "open", "--plugin", "barnuri.auto-update", "--entrypoint", "logs"]
+
+[[actions]]
+id = "toggle-status"
+title = "Show/hide the auto-update status line"
+description = "Toggle the version entry in the tab bar. Applies on the next tab-bar refresh."
+contexts = ["workspace", "pane"]
+command = ["node", "bin/toggle-status.js"]
