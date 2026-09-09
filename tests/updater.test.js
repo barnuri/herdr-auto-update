@@ -3,7 +3,7 @@
 const { describe, test } = require('node:test');
 const assert = require('node:assert/strict');
 
-const { decideUpdate } = require('../lib/updater');
+const { decideUpdate, updateEnv } = require('../lib/updater');
 
 const ALL_ON = { autoUpdateMajors: true, autoUpdateMinors: true, autoUpdatePatches: true };
 
@@ -23,5 +23,24 @@ describe('decideUpdate', () => {
   test('does nothing when already up to date or ahead', () => {
     assert.deepEqual(decideUpdate(ALL_ON, '0.8.2', '0.8.2'), { action: 'none', kind: null });
     assert.deepEqual(decideUpdate(ALL_ON, '0.9.0', '0.8.2'), { action: 'none', kind: null });
+  });
+});
+
+describe('updateEnv', () => {
+  test('strips the herdr session markers that block self-update', () => {
+    const stripped = updateEnv({
+      HERDR_ENV: '1',
+      HERDR_SESSION: 'main',
+      HERDR_PANE_ID: 'w1:p1',
+      HERDR_TAB_ID: 'w1:t1',
+      HERDR_WORKSPACE_ID: 'w1',
+      PATH: '/usr/bin',
+    });
+    assert.deepEqual(stripped, { PATH: '/usr/bin' });
+  });
+
+  test('keeps the socket and binary path so --handoff still reaches the server', () => {
+    const stripped = updateEnv({ HERDR_ENV: '1', HERDR_SOCKET_PATH: '/tmp/h.sock', HERDR_BIN_PATH: '/bin/herdr' });
+    assert.deepEqual(stripped, { HERDR_SOCKET_PATH: '/tmp/h.sock', HERDR_BIN_PATH: '/bin/herdr' });
   });
 });
